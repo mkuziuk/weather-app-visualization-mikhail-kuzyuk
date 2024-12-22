@@ -17,3 +17,9 @@ def get_weather_data(location_key):
     forecast = requests.get(forecast_url).json()
 
     return current_conditions, forecast
+
+
+def get_weather_forecast(location_key, days=5):
+    forecast_url = f"http://dataservice.accuweather.com/forecasts/v1/daily/{days}day/{location_key}?apikey={API_KEY}&metric=true"
+    response = requests.get(forecast_url)
+    return response.json()
