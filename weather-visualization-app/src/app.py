@@ -1,9 +1,13 @@
 from dash import Dash, dcc, html, Input, Output, State
+import os
 import dash_bootstrap_components as dbc
+import dash_leaflet as dl
 from components.temperature_graph import create_temperature_graph
 from components.wind_speed_graph import create_wind_speed_graph
 from components.precipitation_graph import create_precipitation_graph
 from data.weather_data import get_weather_data
+
+api_key = os.getenv("hNLslNHqYdLIxpOm36dyy1143FnopGCi")
 
 app = Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 
@@ -35,6 +39,16 @@ app.layout = html.Div(
                 ),
                 html.Button("Get Weather", id="get-weather-button", n_clicks=0),
                 html.Div(id="graphs-container"),
+                dl.Map(
+                    id="map",
+                    center=[56.1304, -106.3468],
+                    zoom=4,
+                    children=[
+                        dl.TileLayer(),
+                        dl.LayerGroup(id="layer"),
+                    ],
+                    style={"width": "100%", "height": "500px"},
+                ),
             ]
         )
     ]
@@ -56,17 +70,17 @@ def add_stop(n_clicks, children):
 
 @app.callback(
     Output("graphs-container", "children"),
+    Output("layer", "children"),
     Input("get-weather-button", "n_clicks"),
     State("start-point", "value"),
     State("end-point", "value"),
     State("stops-container", "children"),
     State("time-interval-dropdown", "value"),
 )
-def update_graphs(n_clicks, start_point, end_point, stops, selected_interval):
-    if not start_point or not end_point:
-        return [html.Div("Please enter both start and end points.")]
+def update_graphs_and_map(n_clicks, start_point, end_point, stops, selected_interval):
+    if n_clicks == 0:
+        return [], []
 
-    api_key = "UE1oZUm7VHPIMpZzoBvAxGcAHQSAHBel"
     locations = [start_point]
     if stops:
         for stop in stops:
@@ -75,12 +89,22 @@ def update_graphs(n_clicks, start_point, end_point, stops, selected_interval):
     locations.append(end_point)
 
     all_weather_data = []
+    markers = []
     for location in locations:
         try:
             weather_data = get_weather_data(api_key, location, selected_interval)
             all_weather_data.append(weather_data)
+            markers.append(
+                dl.Marker(
+                    position=[weather_data["lat"], weather_data["lon"]],
+                    children=[
+                        dl.Tooltip(location),
+                        dl.Popup(f"Weather: {weather_data['weather']}"),
+                    ],
+                )
+            )
         except Exception as e:
-            return [html.Div(f"Error fetching data for {location}: {str(e)}")]
+            return [html.Div(f"Error fetching data for {location}: {str(e)}")], []
 
     graphs = []
     for i, weather_data in enumerate(all_weather_data):
@@ -88,12 +112,18 @@ def update_graphs(n_clicks, start_point, end_point, stops, selected_interval):
         wind_speed_graph = create_wind_speed_graph(weather_data)
         precipitation_graph = create_precipitation_graph(weather_data)
 
-        graphs.append(html.Div(f"Location {i+1}: {locations[i]}"))
-        graphs.append(dcc.Graph(figure=temperature_graph))
-        graphs.append(dcc.Graph(figure=wind_speed_graph))
-        graphs.append(dcc.Graph(figure=precipitation_graph))
+        graphs.append(
+            html.Div(
+                [
+                    html.Div(f"Location {i+1}: {locations[i]}"),
+                    dcc.Graph(figure=temperature_graph),
+                    dcc.Graph(figure=wind_speed_graph),
+                    dcc.Graph(figure=precipitation_graph),
+                ]
+            )
+        )
 
-    return graphs
+    return graphs, markers
 
 
 if __name__ == "__main__":
